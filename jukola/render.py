@@ -14,16 +14,16 @@ from typing import Optional
 from .analyze import LegInsight, SplitInsight, TeamInsights
 from .model import fmt_gap, fmt_pace, fmt_time
 
-# chart geometry
+# chart geometry (extra right margin for the position axis labels)
 _W, _H = 880, 240
-_L, _R, _T, _B = 46, 16, 18, 40
+_L, _R, _T, _B = 46, 48, 18, 40
 _PW, _PH = _W - _L - _R, _H - _T - _B
 
 # colours
-_C_POINT = "#3b7dd8"      # all split points (height carries performance)
-_C_MISS = "#e4572e"       # skipped / mispunch marker (a data state, not a tier)
+_C_POINT = "#3b7dd8"      # split points (height = rank on that fork)
+_C_MISS = "#e4572e"       # fork-junction / skipped-control marker
+_C_POS = "#7b52d6"        # overall relay-position series (right axis)
 _C_GRID = "#e6e6e6"
-_C_AXIS = "#9aa0a6"
 
 
 def _ordinal(n: int) -> str:
@@ -32,12 +32,6 @@ def _ordinal(n: int) -> str:
     else:
         suf = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
     return f"{n}{suf}"
-
-
-def _x(i: int, n: int) -> float:
-    if n <= 1:
-        return _L + _PW / 2
-    return _L + _PW * i / (n - 1)
 
 
 def _y(pct: float) -> float:
@@ -162,11 +156,63 @@ def split_rank_chart(leg: LegInsight) -> str:
             )
             last_label_x = px
 
+    parts.append(_position_series(leg, pts, x))
+
     parts.append(
         f'<text x="{_L}" y="{_H - 6}" class="axis-title">distance →</text>'
     )
     parts.append("</svg>")
     return "".join(parts)
+
+
+def _position_series(leg: LegInsight, pts: list, x) -> str:
+    """Overall relay position on a right axis. Anchored at the start (distance 0)
+    — grid position (= team number) on leg 1, the exchange standing otherwise —
+    then plotted at common (full-field) controls only. At forked controls the
+    'position' is just a placing within that fork, not a true standing."""
+    have = [s for s in pts if s.relay_pos and s.relay_field]
+    if not have:
+        return ""
+    leg_max = max(s.relay_field for s in have)
+    commons = [s for s in have if s.relay_field >= 0.75 * leg_max]
+
+    # nodes: (x, position, tooltip). Lead with the start anchor if known.
+    nodes: list[tuple[float, int, str]] = []
+    if leg.start_position is not None:
+        where = "grid start" if leg.legnro == 1 else "at exchange"
+        nodes.append((float(_L), leg.start_position,
+                      f"Start ({where}): position {leg.start_position}"))
+    for s in commons:
+        nodes.append((x(s.cn), s.relay_pos,
+                      f"After control {s.cn}: {_ordinal(s.relay_pos)} overall "
+                      f"(of {s.relay_field})"))
+    if len(nodes) < 2:
+        return ""
+
+    positions = [p for _, p, _ in nodes]
+    pmin, pmax = min(positions), max(positions)
+    pad = max(1.0, (pmax - pmin) * 0.2)
+    lo, hi = pmin - pad, pmax + pad
+
+    def yp(pos: int) -> float:
+        return _T + _PH * (pos - lo) / (hi - lo)  # smaller (better) -> top
+
+    out: list[str] = []
+    pl = " ".join(f"{nx:.1f},{yp(p):.1f}" for nx, p, _ in nodes)
+    out.append(f'<polyline points="{pl}" fill="none" stroke="{_C_POS}" '
+               f'stroke-width="1.5" opacity="0.85"/>')
+    for nx, p, tip in nodes:
+        out.append(
+            f'<g><circle cx="{nx:.1f}" cy="{yp(p):.1f}" r="3" fill="{_C_POS}"/>'
+            f'<title>{escape(tip)}</title></g>'
+        )
+    # right-axis labels: best (top) and worst (bottom) position reached
+    rx = _W - _R + 5
+    out.append(f'<text x="{rx}" y="{yp(pmin) + 3:.1f}" class="postick">{pmin}</text>')
+    out.append(f'<text x="{rx}" y="{yp(pmax) + 3:.1f}" class="postick">{pmax}</text>')
+    out.append(f'<text x="{_W - 2}" y="{_T - 6}" text-anchor="end" '
+               f'class="postick">position</text>')
+    return "".join(out)
 
 
 def _leg_block(leg: LegInsight) -> str:
@@ -251,7 +297,8 @@ def render_team_page(t: TeamInsights, event_name: str) -> str:
   <div class="result">{head_stat}</div>
   <p class="legend">
     <span class="dot point"></span> control split (height = rank on that fork)
-    <span class="fork-key"></span> fork junction / skipped control (no comparable split)
+    <span class="dot pos"></span> overall position (right axis, common controls)
+    <span class="fork-key"></span> fork junction / skipped control
   </p>
 </header>
 <main>{legs_html}</main>
@@ -281,6 +328,7 @@ h1 { margin: 8px 0 4px; font-size: 26px; }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%;
   margin: 0 3px 0 10px; vertical-align: middle; }
 .dot.point { background: #3b7dd8; }
+.dot.pos { background: #7b52d6; }
 .fork-key { display: inline-block; width: 12px; height: 0; margin: 0 4px 0 10px;
   border-top: 1.5px dashed #e4572e; vertical-align: middle; }
 main { padding: 8px max(16px, 5vw) 40px; }
@@ -298,6 +346,7 @@ main { padding: 8px max(16px, 5vw) 40px; }
 .tick { fill: #9aa0a6; font-size: 11px; }
 .xtick { fill: #b0b6bd; font-size: 9px; }
 .cnum { fill: #8a93a0; font-size: 9px; }
+.postick { fill: #7b52d6; font-size: 9px; }
 .axis-title { fill: #9aa0a6; font-size: 11px; }
 .chart circle:hover { stroke: #1a1d21; stroke-width: 1.5; }
 .mistakes { font-size: 13px; background: #fff6f3; border: 1px solid #f6d9cf;

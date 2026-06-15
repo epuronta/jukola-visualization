@@ -49,6 +49,9 @@ class Field:
     segment_times: dict[tuple[int, str, str], list[int]]
     leg_winner: dict[int, tuple[int, str, str]]     # legnro -> (secs, runner, team)
     winner_total: Optional[int]                     # official winning total time (secs)
+    # (legnro, cc) -> sorted relay-cumulative times (exchange-before + ct) of
+    # every team validly at that control: the live overall standings per control.
+    relay_cum_times: dict[tuple[int, str], list[int]]
 
     def leg_rank(self, legnro: int, secs: int) -> tuple[int, int]:
         vals = self.leg_times.get(legnro, [])
@@ -69,6 +72,13 @@ class Field:
             return None, 0
         return _rank(vals, secs), len(vals)
 
+    def relay_position(self, legnro: int, cc: str, relay_cum: int) -> tuple[Optional[int], int]:
+        """Overall relay placing at a control (rank of relay-cumulative time)."""
+        vals = self.relay_cum_times.get((legnro, cc))
+        if not vals:
+            return None, 0
+        return _rank(vals, relay_cum), len(vals)
+
 
 def _percentile_best(times_sorted: list[int]) -> float:
     n = len(times_sorted)
@@ -85,12 +95,15 @@ def build_field(teams: list[Team]) -> Field:
     leg_times: dict[int, list[int]] = defaultdict(list)
     seg_times: dict[tuple[int, str, str], list[int]] = defaultdict(list)
     standings_raw: dict[int, list[int]] = defaultdict(list)
+    relay_cum: dict[tuple[int, str], list[int]] = defaultdict(list)
     leg_winner: dict[int, tuple[int, str, str]] = {}
 
     for t in teams:
         cum = 0
         still_in = True
         for leg in t.legs:
+            ex_before = cum             # exchange time entering this leg
+            valid_before = still_in     # chain valid up to this leg's start?
             if leg.leg_secs is not None:
                 leg_times[leg.legnro].append(leg.leg_secs)
                 w = leg_winner.get(leg.legnro)
@@ -102,6 +115,13 @@ def build_field(teams: list[Team]) -> Field:
                 standings_raw[leg.legnro].append(cum)
             else:
                 still_in = False
+            # live overall standings at each control: relay-cumulative time of
+            # every team whose chain was valid entering this leg (the runner may
+            # still mispunch this leg — they were physically at that position).
+            if valid_before:
+                for s in leg.splits:
+                    if s.cum_secs is not None:
+                        relay_cum[(leg.legnro, s.cc)].append(ex_before + s.cum_secs)
             # segment splits, keyed on (leg, physical control pair) — within-leg.
             # Only legs with a valid official result count toward the comparison
             # pool, matching the official split view (a mispunched leg still has
@@ -120,6 +140,8 @@ def build_field(teams: list[Team]) -> Field:
         v.sort()
     for v in seg_times.values():
         v.sort()
+    for v in relay_cum.values():
+        v.sort()
     totals = [t.total_secs for t in teams if t.total_secs is not None]
     return Field(
         n_legs=n_legs,
@@ -128,6 +150,7 @@ def build_field(teams: list[Team]) -> Field:
         segment_times=dict(seg_times),
         leg_winner=leg_winner,
         winner_total=min(totals) if totals else None,
+        relay_cum_times=dict(relay_cum),
     )
 
 
@@ -147,6 +170,8 @@ class SplitInsight:
     rank: Optional[int] = None    # rank on this fork segment (1 = fastest)
     field_size: int = 0           # how many ran this exact segment
     pct: Optional[float] = None   # rank as fraction 0..1 (0 = fastest), for plotting
+    relay_pos: Optional[int] = None  # overall relay placing at this control
+    relay_field: int = 0          # teams validly at this control
 
 
 @dataclass
@@ -165,6 +190,7 @@ class LegInsight:
     total_dist_m: Optional[int]
     avg_pace: Optional[float]
     time_lost: int                # summed gap to segment bests
+    start_position: Optional[int] = None  # position entering the leg (leg 1: grid = team number)
     splits: list[SplitInsight] = field(default_factory=list)
     worst_splits: list[SplitInsight] = field(default_factory=list)
     note: str = ""
@@ -188,7 +214,8 @@ class TeamInsights:
     total_time_lost: int
 
 
-def _analyze_splits(leg: Leg, field_: Field) -> tuple[list[SplitInsight], int]:
+def _analyze_splits(leg: Leg, field_: Field,
+                    exchange_before: Optional[int]) -> tuple[list[SplitInsight], int]:
     out: list[SplitInsight] = []
     total_lost = 0
     prev_cc = "S"
@@ -197,9 +224,17 @@ def _analyze_splits(leg: Leg, field_: Field) -> tuple[list[SplitInsight], int]:
         key = (leg.legnro, prev_cc, s.cc)
         best = field_.segment_best(key)
         prev_cc = s.cc
+        # overall relay placing at this control (defined whenever the team had a
+        # valid chain into this leg and reached the control)
+        relay_pos = None
+        relay_field = 0
+        if exchange_before is not None and s.cum_secs is not None:
+            relay_pos, relay_field = field_.relay_position(
+                leg.legnro, s.cc, exchange_before + s.cum_secs)
         if s.split_secs is None:
             out.append(SplitInsight(s.cn, s.cc, from_cc, s.cum_secs, None, s.dist_m,
-                                    None, best, None, False, missing=True))
+                                    None, best, None, False, missing=True,
+                                    relay_pos=relay_pos, relay_field=relay_field))
             continue
         rank, fsize = field_.segment_rank(key, s.split_secs)
         pct = (rank - 1) / (fsize - 1) if rank and fsize > 1 else (0.0 if rank else None)
@@ -214,7 +249,8 @@ def _analyze_splits(leg: Leg, field_: Field) -> tuple[list[SplitInsight], int]:
             )
         out.append(SplitInsight(s.cn, s.cc, from_cc, s.cum_secs, s.split_secs, s.dist_m,
                                 s.pace, best, time_loss, is_mistake, missing=False,
-                                rank=rank, field_size=fsize, pct=pct))
+                                rank=rank, field_size=fsize, pct=pct,
+                                relay_pos=relay_pos, relay_field=relay_field))
     return out, total_lost
 
 
@@ -224,9 +260,16 @@ def analyze_team(team: Team, field_: Field) -> TeamInsights:
     still_in = True
     prev_position: Optional[int] = None
     total_time_lost = 0
+    # team number = mass-start grid position (the bib); the field's start anchor
+    team_number = int(team.teamid) if team.teamid.isdigit() else None
 
     for leg in team.legs:
-        splits, time_lost = _analyze_splits(leg, field_)
+        exchange_before = cum if still_in else None
+        # position entering this leg: grid (team number) on leg 1, otherwise the
+        # exchange standing carried over from the previous leg
+        start_position = team_number if leg.legnro == 1 else (
+            prev_position if still_in else None)
+        splits, time_lost = _analyze_splits(leg, field_, exchange_before)
         total_time_lost += time_lost
         worst = sorted(
             (s for s in splits if s.time_loss),
@@ -262,7 +305,8 @@ def analyze_team(team: Team, field_: Field) -> TeamInsights:
             total_dist_m=leg.total_dist_m,
             avg_pace=(leg.leg_secs / (leg.total_dist_m / 1000.0)
                       if leg.has_result and leg.total_dist_m else None),
-            time_lost=time_lost, splits=splits, worst_splits=worst, note=note,
+            time_lost=time_lost, start_position=start_position,
+            splits=splits, worst_splits=worst, note=note,
         ))
 
     ranked = [l for l in legs_out if l.has_result and l.leg_rank]
