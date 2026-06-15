@@ -22,7 +22,7 @@ _PW, _PH = _W - _L - _R, _H - _T - _B
 # colours
 _C_POINT = "#3b7dd8"      # split points (height = rank on that fork)
 _C_MISS = "#e4572e"       # fork-junction / skipped-control marker
-_C_POS = "#7b52d6"        # overall relay-position series (right axis)
+_C_POS = "#1a9850"        # overall relay-position series (right axis, green squares)
 _C_GRID = "#e6e6e6"
 
 
@@ -171,21 +171,32 @@ def _position_series(leg: LegInsight, pts: list, x) -> str:
     then plotted at common (full-field) controls only. At forked controls the
     'position' is just a placing within that fork, not a true standing."""
     have = [s for s in pts if s.relay_pos and s.relay_field]
-    if not have:
-        return ""
-    leg_max = max(s.relay_field for s in have)
-    commons = [s for s in have if s.relay_field >= 0.75 * leg_max]
+    commons = []
+    if have:
+        leg_max = max(s.relay_field for s in have)
+        commons = [s for s in have if s.relay_field >= 0.75 * leg_max]
+    last_cn = max((s.cn for s in pts), default=0)
+    # the leg's finish IS the exchange; prefer the canonical exchange standing
+    # (leg.position, = the official change-over placing) over the per-control
+    # pool there, so the endpoint matches the header and the next leg's start.
+    use_exchange = leg.position is not None
 
-    # nodes: (x, position, tooltip). Lead with the start anchor if known.
+    # nodes: (x, position, tooltip). Start anchor, intermediate commons, exchange.
     nodes: list[tuple[float, int, str]] = []
     if leg.start_position is not None:
         where = "grid start" if leg.legnro == 1 else "at exchange"
         nodes.append((float(_L), leg.start_position,
                       f"Start ({where}): position {leg.start_position}"))
     for s in commons:
+        if use_exchange and s.cn == last_cn:
+            continue  # replaced by the canonical exchange node below
         nodes.append((x(s.cn), s.relay_pos,
                       f"After control {s.cn}: {_ordinal(s.relay_pos)} overall "
                       f"(of {s.relay_field})"))
+    if use_exchange and last_cn:
+        field_txt = f" (of {leg.position_field})" if leg.position_field else ""
+        nodes.append((x(last_cn), leg.position,
+                      f"At exchange: {_ordinal(leg.position)} overall{field_txt}"))
     if len(nodes) < 2:
         return ""
 
@@ -203,8 +214,8 @@ def _position_series(leg: LegInsight, pts: list, x) -> str:
                f'stroke-width="1.5" opacity="0.85"/>')
     for nx, p, tip in nodes:
         out.append(
-            f'<g><circle cx="{nx:.1f}" cy="{yp(p):.1f}" r="3" fill="{_C_POS}"/>'
-            f'<title>{escape(tip)}</title></g>'
+            f'<g><rect x="{nx - 3.5:.1f}" y="{yp(p) - 3.5:.1f}" width="7" height="7" '
+            f'fill="{_C_POS}"/><title>{escape(tip)}</title></g>'
         )
     # right-axis labels: best (top) and worst (bottom) position reached
     rx = _W - _R + 5
@@ -328,7 +339,7 @@ h1 { margin: 8px 0 4px; font-size: 26px; }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%;
   margin: 0 3px 0 10px; vertical-align: middle; }
 .dot.point { background: #3b7dd8; }
-.dot.pos { background: #7b52d6; }
+.dot.pos { background: #1a9850; border-radius: 1px; }
 .fork-key { display: inline-block; width: 12px; height: 0; margin: 0 4px 0 10px;
   border-top: 1.5px dashed #e4572e; vertical-align: middle; }
 main { padding: 8px max(16px, 5vw) 40px; }
@@ -346,7 +357,7 @@ main { padding: 8px max(16px, 5vw) 40px; }
 .tick { fill: #9aa0a6; font-size: 11px; }
 .xtick { fill: #b0b6bd; font-size: 9px; }
 .cnum { fill: #8a93a0; font-size: 9px; }
-.postick { fill: #7b52d6; font-size: 9px; }
+.postick { fill: #1a9850; font-size: 9px; }
 .axis-title { fill: #9aa0a6; font-size: 11px; }
 .chart circle:hover { stroke: #1a1d21; stroke-width: 1.5; }
 .mistakes { font-size: 13px; background: #fff6f3; border: 1px solid #f6d9cf;
