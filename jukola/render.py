@@ -86,7 +86,7 @@ def split_rank_chart(leg: LegInsight) -> str:
                      f'class="xtick">{t / 1000:g} km</text>')
         t += step
 
-    # horizontal gridlines + y labels (percentile: top = fastest)
+    # horizontal gridlines + percentile labels (RIGHT axis: top = fastest)
     for frac, label in [(0.0, "fastest"), (0.25, "25%"), (0.5, "50%"),
                         (0.75, "75%"), (1.0, "slowest")]:
         y = _y(frac)
@@ -95,7 +95,7 @@ def split_rank_chart(leg: LegInsight) -> str:
             f'stroke="{_C_GRID}"/>'
         )
         parts.append(
-            f'<text x="{_L - 6}" y="{y + 3:.1f}" text-anchor="end" '
+            f'<text x="{_W - _R + 6}" y="{y + 3:.1f}" text-anchor="start" '
             f'class="tick">{label}</text>'
         )
 
@@ -218,11 +218,13 @@ def _position_series(leg: LegInsight, pts: list, x) -> str:
             f'<g><rect x="{nx - 3.5:.1f}" y="{yp(p) - 3.5:.1f}" width="7" height="7" '
             f'fill="{_C_POS}"/><title>{escape(tip)}</title></g>'
         )
-    # right-axis labels: best (top) and worst (bottom) position reached
-    rx = _W - _R + 5
-    out.append(f'<text x="{rx}" y="{yp(pmin) + 3:.1f}" class="postick">{pmin}</text>')
-    out.append(f'<text x="{rx}" y="{yp(pmax) + 3:.1f}" class="postick">{pmax}</text>')
-    out.append(f'<text x="{_W - 2}" y="{_T - 6}" text-anchor="end" '
+    # left-axis labels: best (top) and worst (bottom) position reached
+    lx = _L - 6
+    out.append(f'<text x="{lx}" y="{yp(pmin) + 3:.1f}" text-anchor="end" '
+               f'class="postick">{pmin}</text>')
+    out.append(f'<text x="{lx}" y="{yp(pmax) + 3:.1f}" text-anchor="end" '
+               f'class="postick">{pmax}</text>')
+    out.append(f'<text x="{_L}" y="{_T - 6}" text-anchor="start" '
                f'class="postick">position</text>')
     return "".join(out)
 
@@ -330,12 +332,12 @@ def overview_chart(t: TeamInsights) -> str:
         f'aria-label="Whole-race overview for {escape(t.teamname)}">'
     ]
 
-    # horizontal gridlines + left (percentile) labels
+    # horizontal gridlines + percentile labels (RIGHT axis)
     for frac, label in [(0.0, "fastest"), (0.5, "50%"), (1.0, "slowest")]:
         y = gy(frac)
         p.append(f'<line x1="{_OL}" y1="{y:.1f}" x2="{_OW - _ORR}" y2="{y:.1f}" '
                  f'stroke="{_C_GRID}"/>')
-        p.append(f'<text x="{_OL - 6}" y="{y + 3:.1f}" text-anchor="end" '
+        p.append(f'<text x="{_OW - _ORR + 6}" y="{y + 3:.1f}" text-anchor="start" '
                  f'class="tick">{label}</text>')
 
     # leg dividers, runner names (top), cumulative-distance labels (bottom)
@@ -414,10 +416,12 @@ def overview_chart(t: TeamInsights) -> str:
         for nx, pv, tip in nodes:
             p.append(f'<g><rect x="{nx - 3:.1f}" y="{yp(pv) - 3:.1f}" width="6" '
                      f'height="6" fill="{_C_POS}"/><title>{escape(tip)}</title></g>')
-        rx = _OW - _ORR + 5
-        p.append(f'<text x="{rx}" y="{yp(pmin) + 3:.1f}" class="postick">{pmin}</text>')
-        p.append(f'<text x="{rx}" y="{yp(pmax) + 3:.1f}" class="postick">{pmax}</text>')
-        p.append(f'<text x="{_OW - 2}" y="{_OT - 6}" text-anchor="end" '
+        lx = _OL - 6
+        p.append(f'<text x="{lx}" y="{yp(pmin) + 3:.1f}" text-anchor="end" '
+                 f'class="postick">{pmin}</text>')
+        p.append(f'<text x="{lx}" y="{yp(pmax) + 3:.1f}" text-anchor="end" '
+                 f'class="postick">{pmax}</text>')
+        p.append(f'<text x="{_OL}" y="{_OT - 6}" text-anchor="start" '
                  f'class="postick">position</text>')
 
     p.append(f'<text x="{_OL}" y="{_OH - 6}" class="axis-title">distance →</text>')
@@ -452,7 +456,7 @@ def render_team_page(t: TeamInsights, event_name: str) -> str:
   <div class="result">{head_stat}</div>
   <p class="legend">
     <span class="dot point"></span> control split (height = rank on that fork)
-    <span class="dot pos"></span> overall position (right axis, common controls)
+    <span class="dot pos"></span> overall position (left axis, common controls)
     <span class="fork-key"></span> fork junction / skipped control
   </p>
 </header>
@@ -501,7 +505,7 @@ main { padding: 8px max(16px, 5vw) 40px; }
 .tick { fill: #9aa0a6; font-size: 11px; }
 .xtick { fill: #b0b6bd; font-size: 9px; }
 .cnum { fill: #8a93a0; font-size: 9px; }
-.postick { fill: #1a9850; font-size: 9px; }
+.postick { fill: #1a9850; font-size: 11px; }
 .legname { fill: #444b54; font-size: 11px; font-weight: 600; }
 .axis-title { fill: #9aa0a6; font-size: 11px; }
 .chart circle:hover { stroke: #1a1d21; stroke-width: 1.5; }
