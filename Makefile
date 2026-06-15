@@ -14,7 +14,7 @@ WIN    ?= 960,2600
 # generated page path for the selected event/team
 PAGE   = $(DOCS)/$(YEAR)/$(RELAY)/$(TEAM).html
 
-.PHONY: team all preview shot open clean require-team
+.PHONY: team all index preview shot open clean require-team
 
 require-team:
 	@test -n "$(TEAM)" || { echo "set TEAM=<teamid>, e.g. make $(MAKECMDGOALS) TEAM=123"; exit 1; }
@@ -23,9 +23,14 @@ require-team:
 team: require-team
 	$(PY) -m jukola.generate --xml $(XML) --docs $(DOCS) --year $(YEAR) --relay $(RELAY) --team $(TEAM)
 
-# Render every team page for the event
+# Render every team page for the event, then rebuild the indexes
 all:
 	$(PY) -m jukola.generate --xml $(XML) --docs $(DOCS) --year $(YEAR) --relay $(RELAY) --all
+	$(MAKE) index
+
+# (Re)build the docs index pages from whatever has been generated
+index:
+	$(PY) -m jukola.index --docs $(DOCS)
 
 # Render a team and grab a screenshot (make preview TEAM=123)
 preview: team shot
