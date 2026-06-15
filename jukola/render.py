@@ -44,46 +44,52 @@ def _y(pct: float) -> float:
     return _T + _PH * pct
 
 
-def _time_step(total: int) -> int:
-    """Pick a 'nice' x-axis tick interval (secs) giving ~4-6 gridlines."""
-    for st in (120, 300, 600, 900, 1200, 1800, 3600, 7200):
+def _dist_step(total: float) -> int:
+    """Pick a 'nice' distance tick interval (m) giving ~4-6 gridlines."""
+    for st in (250, 500, 1000, 2000, 2500, 5000, 10000):
         if total / st <= 6:
             return st
-    return 7200
+    return 10000
 
 
 def split_rank_chart(leg: LegInsight) -> str:
     """Inline SVG: split-rank progression across one leg's controls.
 
-    The x-axis is cumulative time from start to finish, so each segment's
-    horizontal width is its split duration. A short split that cost rank stays
-    visually small; a long time-sink dominates the chart — conveying how much
-    each split actually mattered. Controls the fork skipped are simply absent
-    from the timeline (the time gap shows them); fork junctions are marked.
+    The x-axis is cumulative straight-line distance (cl), so each segment's
+    horizontal width is the ground it covers. A short leg that cost rank shows
+    as a narrow, deep spike (clearly a nav error); long legs get proportional
+    width. Controls the fork skipped are absent from the axis (their distance
+    isn't in the runner's data, so the distance slightly undercounts at fork
+    junctions); fork junctions are marked.
     """
     pts = [s for s in leg.splits if s.cn and s.cum_secs is not None]
     if not pts:
         return '<p class="muted">No split data for this leg.</p>'
 
-    total = max(s.cum_secs for s in pts)
+    xv: dict[int, float] = {}
+    cum = 0.0
+    for s in pts:
+        cum += s.dist_m or 0
+        xv[s.cn] = cum
+    total = cum or 1.0
+    step = _dist_step(total)
 
-    def x(t: int) -> float:
-        return _L + _PW * t / total if total else _L + _PW / 2
+    def x(cn: int) -> float:
+        return _L + _PW * xv[cn] / total
 
     parts: list[str] = [
         f'<svg viewBox="0 0 {_W} {_H}" class="chart" role="img" '
         f'aria-label="Split rank progression for leg {leg.legnro}">'
     ]
 
-    # vertical time gridlines + bottom labels
-    step = _time_step(total)
-    t = 0
+    # vertical gridlines + bottom labels (time or distance)
+    t = 0.0
     while t <= total:
-        gx = x(t)
+        gx = _L + _PW * t / total
         parts.append(f'<line x1="{gx:.1f}" y1="{_T}" x2="{gx:.1f}" '
                      f'y2="{_T + _PH}" stroke="{_C_GRID}"/>')
         parts.append(f'<text x="{gx:.1f}" y="{_H - _B + 14}" text-anchor="middle" '
-                     f'class="xtick">{fmt_time(t)}</text>')
+                     f'class="xtick">{t / 1000:g} km</text>')
         t += step
 
     # horizontal gridlines + y labels (percentile: top = fastest)
@@ -107,7 +113,7 @@ def split_rank_chart(leg: LegInsight) -> str:
     for s in pts:
         if plottable(s):
             continue
-        gx = x(s.cum_secs)
+        gx = x(s.cn)
         parts.append(
             f'<g><line x1="{gx:.1f}" y1="{_T}" x2="{gx:.1f}" y2="{_T + _PH}" '
             f'stroke="{_C_MISS}" stroke-width="1" stroke-dasharray="2 3" '
@@ -131,7 +137,7 @@ def split_rank_chart(leg: LegInsight) -> str:
             flush()
             run = []
         if plottable(s):
-            run.append((x(s.cum_secs), _y(s.pct)))
+            run.append((x(s.cn), _y(s.pct)))
         prev_cn = s.cn
     flush()
 
@@ -140,7 +146,7 @@ def split_rank_chart(leg: LegInsight) -> str:
     for s in pts:
         if not plottable(s):
             continue
-        px, py = x(s.cum_secs), _y(s.pct)
+        px, py = x(s.cn), _y(s.pct)
         rank_txt = f"{_ordinal(s.rank)} of {s.field_size}" if s.rank else "–"
         loss = f"  (+{fmt_time(s.time_loss)})" if s.time_loss else ""
         tip = (f"Control {s.cn} ({escape(s.cc)}) — {fmt_time(s.split_secs)} — "
@@ -157,7 +163,7 @@ def split_rank_chart(leg: LegInsight) -> str:
             last_label_x = px
 
     parts.append(
-        f'<text x="{_L}" y="{_H - 6}" class="axis-title">time →</text>'
+        f'<text x="{_L}" y="{_H - 6}" class="axis-title">distance →</text>'
     )
     parts.append("</svg>")
     return "".join(parts)
