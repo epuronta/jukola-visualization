@@ -452,7 +452,7 @@ def render_team_page(t: TeamInsights, event_name: str) -> str:
 <body>
 <header class="page-head">
   <div class="crumb"><a href="index.html">← all teams</a> · {escape(event_name)}</div>
-  <h1>{title} <span class="bib">#{escape(t.teamnro)}</span></h1>
+  <h1>{title} <span class="bib">#{escape(t.teamid)}</span></h1>
   <div class="result">{head_stat}</div>
   <p class="legend">
     <span class="dot point"></span> control split (height = rank on that fork)
