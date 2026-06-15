@@ -202,8 +202,9 @@ def _position_series(leg: LegInsight, pts: list, x) -> str:
 
     positions = [p for _, p, _ in nodes]
     pmin, pmax = min(positions), max(positions)
-    pad = max(1.0, (pmax - pmin) * 0.2)
-    lo, hi = pmin - pad, pmax + pad
+    # best position reached sits on the top line; pad only the bottom
+    hi = pmax + max(1.0, (pmax - pmin) * 0.15)
+    lo = pmin
 
     def yp(pos: int) -> float:
         return _T + _PH * (pos - lo) / (hi - lo)  # smaller (better) -> top
@@ -283,6 +284,147 @@ def _leg_block(leg: LegInsight) -> str:
     )
 
 
+# whole-race overview geometry (wider; extra top room for runner names)
+_OW, _OH = 1200, 300
+_OL, _ORR, _OT, _OB = 46, 50, 40, 40
+_OPW, _OPH = _OW - _OL - _ORR, _OH - _OT - _OB
+
+
+def _trunc(s: str, n: int) -> str:
+    return s if len(s) <= n else s[: max(1, n - 1)] + "…"
+
+
+def _leg_dist_cumsum(leg) -> dict[int, float]:
+    """Within-leg cumulative distance (m) keyed by control number."""
+    out: dict[int, float] = {}
+    cum = 0.0
+    for s in leg.splits:
+        if s.cn and s.cum_secs is not None:
+            cum += s.dist_m or 0
+            out[s.cn] = cum
+    return out
+
+
+def overview_chart(t: TeamInsights) -> str:
+    """A single graph spanning the whole relay: split-rank texture per leg plus
+    the continuous overall-position line, with the x-axis scaled by cumulative
+    distance so each leg is as wide as it is long. Dividers + runner names mark
+    the exchanges."""
+    legs = t.legs
+    dists = [(l.total_dist_m or 0) for l in legs]
+    bnd = [0.0]
+    for d in dists:
+        bnd.append(bnd[-1] + d)
+    total = bnd[-1] or 1.0
+    if total <= 1:
+        return ""
+
+    def gx(d: float) -> float:
+        return _OL + _OPW * d / total
+
+    def gy(pct: float) -> float:
+        return _OT + _OPH * pct
+
+    p: list[str] = [
+        f'<svg viewBox="0 0 {_OW} {_OH}" class="chart" role="img" '
+        f'aria-label="Whole-race overview for {escape(t.teamname)}">'
+    ]
+
+    # horizontal gridlines + left (percentile) labels
+    for frac, label in [(0.0, "fastest"), (0.5, "50%"), (1.0, "slowest")]:
+        y = gy(frac)
+        p.append(f'<line x1="{_OL}" y1="{y:.1f}" x2="{_OW - _ORR}" y2="{y:.1f}" '
+                 f'stroke="{_C_GRID}"/>')
+        p.append(f'<text x="{_OL - 6}" y="{y + 3:.1f}" text-anchor="end" '
+                 f'class="tick">{label}</text>')
+
+    # leg dividers, runner names (top), cumulative-distance labels (bottom)
+    for i, leg in enumerate(legs):
+        x0, x1 = gx(bnd[i]), gx(bnd[i + 1])
+        if dists[i] <= 0:
+            continue
+        if i > 0:
+            p.append(f'<line x1="{x0:.1f}" y1="{_OT}" x2="{x0:.1f}" '
+                     f'y2="{_OT + _OPH}" stroke="#cfd4da"/>')
+        cx = (x0 + x1) / 2
+        name = _trunc(f"L{leg.legnro} {leg.runner}", int((x1 - x0) / 5.5))
+        p.append(f'<text x="{cx:.1f}" y="{_OT - 24:.1f}" text-anchor="middle" '
+                 f'class="legname">{escape(name)}</text>')
+        p.append(f'<text x="{x1:.1f}" y="{_OH - _OB + 14:.1f}" text-anchor="middle" '
+                 f'class="xtick">{bnd[i + 1] / 1000:g} km</text>')
+
+    # split-rank texture: a thin line per leg (break across forks)
+    for i, leg in enumerate(legs):
+        xv = _leg_dist_cumsum(leg)
+        run: list[tuple[float, float]] = []
+        prev_cn = None
+
+        def flush(run=run):
+            if len(run) >= 2:
+                d = " ".join(f"{a:.1f},{b:.1f}" for a, b in run)
+                p.append(f'<polyline points="{d}" fill="none" stroke="#c7d2e2" '
+                         f'stroke-width="1.5"/>')
+        for s in leg.splits:
+            ok = s.cn in xv and not s.missing and s.pct is not None
+            gap = prev_cn is not None and s.cn != prev_cn + 1
+            if not ok or gap:
+                flush(); run = run[:0]
+            if ok:
+                run.append((gx(bnd[i] + xv[s.cn]), gy(s.pct)))
+            prev_cn = s.cn
+        flush()
+
+    # continuous overall-position line (right axis), across the whole relay
+    nodes: list[tuple[float, int, str]] = []
+    if legs and legs[0].start_position is not None:
+        nodes.append((gx(0), legs[0].start_position,
+                      f"Start (grid): position {legs[0].start_position}"))
+    for i, leg in enumerate(legs):
+        xv = _leg_dist_cumsum(leg)
+        have = [s for s in leg.splits if s.relay_pos and s.relay_field and s.cn in xv]
+        commons = []
+        if have:
+            lm = max(s.relay_field for s in have)
+            commons = [s for s in have if s.relay_field >= 0.75 * lm]
+        last_cn = max((s.cn for s in leg.splits if s.cn in xv), default=0)
+        use_exchange = leg.position is not None
+        for s in commons:
+            if use_exchange and s.cn == last_cn:
+                continue
+            nodes.append((gx(bnd[i] + xv[s.cn]), s.relay_pos,
+                          f"L{leg.legnro} after control {s.cn}: "
+                          f"{_ordinal(s.relay_pos)} overall"))
+        if use_exchange:
+            nodes.append((gx(bnd[i + 1]), leg.position,
+                          f"After leg {leg.legnro}: {_ordinal(leg.position)} overall"))
+
+    if len(nodes) >= 2:
+        positions = [n[1] for n in nodes]
+        pmin, pmax = min(positions), max(positions)
+        # best position reached sits on the top line; pad only the bottom
+        hi = pmax + max(1.0, (pmax - pmin) * 0.15)
+        lo = pmin
+
+        def yp(pos: int) -> float:
+            return _OT + _OPH * (pos - lo) / (hi - lo)
+
+        pl = " ".join(f"{nx:.1f},{yp(pv):.1f}" for nx, pv, _ in nodes)
+        p.append(f'<polyline points="{pl}" fill="none" stroke="{_C_POS}" '
+                 f'stroke-width="1.5" opacity="0.9"/>')
+        for nx, pv, tip in nodes:
+            p.append(f'<g><rect x="{nx - 3:.1f}" y="{yp(pv) - 3:.1f}" width="6" '
+                     f'height="6" fill="{_C_POS}"/><title>{escape(tip)}</title></g>')
+        rx = _OW - _ORR + 5
+        p.append(f'<text x="{rx}" y="{yp(pmin) + 3:.1f}" class="postick">{pmin}</text>')
+        p.append(f'<text x="{rx}" y="{yp(pmax) + 3:.1f}" class="postick">{pmax}</text>')
+        p.append(f'<text x="{_OW - 2}" y="{_OT - 6}" text-anchor="end" '
+                 f'class="postick">position</text>')
+
+    p.append(f'<text x="{_OL}" y="{_OH - 6}" class="axis-title">distance →</text>')
+    p.append("</svg>")
+    return "".join(p)
+
+
 def render_team_page(t: TeamInsights, event_name: str) -> str:
     title = escape(t.teamname)
     if t.status == "ranked":
@@ -295,6 +437,8 @@ def render_team_page(t: TeamInsights, event_name: str) -> str:
                      f'<span class="muted">— {ran} of {len(t.legs)} legs completed</span>')
 
     legs_html = "".join(_leg_block(l) for l in t.legs)
+    overview = (f'<section class="leg overview"><h3>Whole race</h3>'
+                f'{overview_chart(t)}</section>')
 
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -312,7 +456,7 @@ def render_team_page(t: TeamInsights, event_name: str) -> str:
     <span class="fork-key"></span> fork junction / skipped control
   </p>
 </header>
-<main>{legs_html}</main>
+<main>{overview}{legs_html}</main>
 <footer>Each chart ranks every control split against the runners who ran that
 exact fork segment. Line position is percentile (top = fastest); hover a point
 for the literal rank.</footer>
@@ -358,6 +502,7 @@ main { padding: 8px max(16px, 5vw) 40px; }
 .xtick { fill: #b0b6bd; font-size: 9px; }
 .cnum { fill: #8a93a0; font-size: 9px; }
 .postick { fill: #1a9850; font-size: 9px; }
+.legname { fill: #444b54; font-size: 11px; font-weight: 600; }
 .axis-title { fill: #9aa0a6; font-size: 11px; }
 .chart circle:hover { stroke: #1a1d21; stroke-width: 1.5; }
 .mistakes { font-size: 13px; background: #fff6f3; border: 1px solid #f6d9cf;
