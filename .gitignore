@@ -1,7 +1,7 @@
 # Raw results data (large, fetched separately)
 results_*.xml
 
-# Generated team pages / screenshots — team-specific, never commit (public repo)
+# Local scratch (preview screenshots). Published pages live under docs/<year>/<relay>/
 out/
 
 # Python
