@@ -54,8 +54,13 @@ def _event_pages(event_dir: str) -> list[tuple[str, str, str | None]]:
             continue
         name, bib, _ = _read_page(os.path.join(event_dir, fn))
         out.append((fn, name, bib))
-    # sort by team name, case-insensitive; fall back to filename for stability.
-    out.sort(key=lambda r: (r[1].lower(), r[0]))
+    # sort by team number (bib) numerically, name as fallback/tiebreaker
+    def _key(row: tuple[str, str, str | None]) -> tuple[int, int, str]:
+        _, name, bib = row
+        if bib and bib.isdigit():
+            return (0, int(bib), name.lower())
+        return (1, 0, name.lower())
+    out.sort(key=_key)
     return out
 
 
