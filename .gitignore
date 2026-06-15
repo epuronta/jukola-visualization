@@ -1,6 +1,9 @@
 # Raw results data (large, fetched separately)
 results_*.xml
 
+# Generated team pages / screenshots — team-specific, never commit (public repo)
+out/
+
 # Python
 __pycache__/
 *.py[cod]
