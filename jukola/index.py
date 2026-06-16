@@ -21,6 +21,8 @@ import os
 import re
 from html import escape, unescape
 
+from .render import ANALYTICS
+
 # First <title> in document order is the page <title>; the per-point SVG
 # <title> tooltips come later, so a non-greedy first match is the page title.
 _TITLE_RE = re.compile(r"<title>(.*?)</title>", re.DOTALL)
@@ -86,7 +88,7 @@ def render_event_index(event_name: str, rows: list[tuple[str, str, str | None]])
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{escape(event_name)}</title>
-<style>{_CSS}</style></head>
+<style>{_CSS}</style>{ANALYTICS}</head>
 <body>
 <header>
   <div class="crumb"><a href="../../index.html">← all events</a></div>
@@ -114,7 +116,7 @@ def render_root_index(events: list[tuple[str, str, int]]) -> str:
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jukola Visualization</title>
-<style>{_CSS}</style></head>
+<style>{_CSS}</style>{ANALYTICS}</head>
 <body>
 <header>
   <h1>Jukola Visualization</h1>

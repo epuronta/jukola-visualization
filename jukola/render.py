@@ -14,6 +14,12 @@ from typing import Optional
 from .analyze import LegInsight, SplitInsight, TeamInsights
 from .model import fmt_gap, fmt_pace, fmt_time
 
+# Cookieless, privacy-friendly analytics (no consent banner needed).
+ANALYTICS = (
+    '<script data-goatcounter="https://epuronta.goatcounter.com/count"'
+    ' async src="//gc.zgo.at/count.js"></script>'
+)
+
 # chart geometry (extra right margin for the position axis labels)
 _W, _H = 880, 240
 _L, _R, _T, _B = 46, 48, 18, 40
@@ -448,7 +454,7 @@ def render_team_page(t: TeamInsights, event_name: str) -> str:
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title} — {escape(event_name)}</title>
-<style>{_CSS}</style></head>
+<style>{_CSS}</style>{ANALYTICS}</head>
 <body>
 <header class="page-head">
   <div class="crumb"><a href="index.html">← all teams</a> · {escape(event_name)}</div>
