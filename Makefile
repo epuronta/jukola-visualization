@@ -1,10 +1,12 @@
 # Jukola/Venla insights generator
 
 PY     ?= python3
-XML    ?= results_j2026_ju.xml
 DOCS   ?= docs
 YEAR   ?= 2026
 RELAY  ?= jukola
+# Source data mirrors the output tree: data/<year>/<relay>.xml.
+# Override XML directly only for one-off files outside that layout.
+XML    ?= data/$(YEAR)/$(RELAY).xml
 # TEAM has no default on purpose: never bake a specific team id into the repo.
 # Pass it on the command line, e.g. `make team TEAM=123`.
 TEAM   ?=

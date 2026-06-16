@@ -1,8 +1,10 @@
-# Raw results data (large, fetched separately)
-results_*.xml
-
-# Local scratch (preview screenshots). Published pages live under docs/<year>/<relay>/
+# Local scratch (preview screenshots).
 out/
+
+# Generated site output: built in CI from the committed XML, not committed.
+# Keep the CSS assets (docs/*.css) tracked as source.
+/docs/index.html
+/docs/2026/
 
 # Python
 __pycache__/

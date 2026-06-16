@@ -4,10 +4,13 @@ Visualization of [Jukola](https://www.jukola.com/) orienteering relay results.
 
 ## Data
 
-Results come as a single XML export (e.g. `results_j2026_ju.xml`), one event with
-classes → teams → legs → controls. These files are large (~28MB) and are **not**
-committed — they're gitignored (`results_*.xml`). Drop the export in the repo root
-before running anything.
+Results come as a single XML export per event (classes → teams → legs → controls).
+They live under `data/<year>/<relay>.xml` (e.g. `data/2026/jukola.xml`), mirroring
+the generated output tree, and are committed so the site can be built in CI.
+
+The generated HTML under `docs/` is **not** committed — it is built from the XML by
+the GitHub Actions workflow (`.github/workflows/deploy.yml`) and deployed to Pages.
+Run `make all RELAY=jukola YEAR=2026` locally to build a single event.
 
 ## Status
 
