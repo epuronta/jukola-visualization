@@ -78,7 +78,8 @@ def _event_name(event_dir: str, year: str, relay: str) -> str:
 
 def render_event_index(event_name: str, rows: list[tuple[str, str, str | None]]) -> str:
     items = "\n".join(
-        f'    <li><a href="{escape(fn)}">{escape(name)}</a>'
+        f'    <li data-q="{escape((name + " " + (bib or "")).lower())}">'
+        f'<a href="{escape(fn)}">{escape(name)}</a>'
         + (f' <span class="bib">#{escape(bib)}</span>' if bib else "")
         + "</li>"
         for fn, name, bib in rows
@@ -94,11 +95,30 @@ def render_event_index(event_name: str, rows: list[tuple[str, str, str | None]])
 <header>
   <div class="crumb"><a href="../../index.html">← all events</a></div>
   <h1>{escape(event_name)}</h1>
-  <p class="muted">{count}</p>
+  <input id="q" class="filter" type="search" autocomplete="off"
+    placeholder="Filter by team or bib…">
+  <p class="muted" id="count">{count}</p>
 </header>
 <main><ul class="teams">
 {items}
 </ul></main>
+<script>
+(function() {{
+  var q = document.getElementById('q');
+  var items = document.querySelectorAll('.teams > li');
+  var count = document.getElementById('count');
+  q.addEventListener('input', function() {{
+    var t = this.value.trim().toLowerCase();
+    var n = 0;
+    items.forEach(function(li) {{
+      var show = !t || li.dataset.q.indexOf(t) !== -1;
+      li.hidden = !show;
+      if (show) n++;
+    }});
+    count.textContent = n + (n === 1 ? ' team' : ' teams');
+  }});
+}})();
+</script>
 </body></html>"""
 
 
