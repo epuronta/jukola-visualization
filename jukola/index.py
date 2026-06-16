@@ -21,7 +21,7 @@ import os
 import re
 from html import escape, unescape
 
-from .render import ANALYTICS
+from .render import ANALYTICS, COFFEE
 
 # First <title> in document order is the page <title>; the per-point SVG
 # <title> tooltips come later, so a non-greedy first match is the page title.
@@ -90,6 +90,7 @@ def render_event_index(event_name: str, rows: list[tuple[str, str, str | None]])
 <title>{escape(event_name)}</title>
 <style>{_CSS}</style>{ANALYTICS}</head>
 <body>
+{COFFEE}
 <header>
   <div class="crumb"><a href="../../index.html">← all events</a></div>
   <h1>{escape(event_name)}</h1>
@@ -118,6 +119,7 @@ def render_root_index(events: list[tuple[str, str, int]]) -> str:
 <title>Jukola Visualization</title>
 <style>{_CSS}</style>{ANALYTICS}</head>
 <body>
+{COFFEE}
 <header>
   <h1>Jukola Visualization</h1>
   <p class="muted">Static reports for Jukola orienteering relay results.</p>
@@ -171,6 +173,10 @@ h1 { margin: 8px 0 4px; font-size: 26px; }
 .bib { color: var(--muted); font-size: 13px; }
 ul.teams, ul.events { list-style: none; padding: 0; margin: 16px 0; }
 ul.teams li, ul.events li { padding: 6px 0; border-bottom: 1px solid #ececec; }
+.coffee { position: fixed; top: 12px; right: 12px; z-index: 10;
+  padding: 6px 12px; border: 1px solid #e6e6e6; border-radius: 999px;
+  background: #fff; font-size: 13px; }
+.coffee:hover { background: #f5f7fa; text-decoration: none; }
 """
 
 

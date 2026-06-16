@@ -20,6 +20,13 @@ ANALYTICS = (
     ' async src="//gc.zgo.at/count.js"></script>'
 )
 
+# Optional tip jar (MobilePay). Reused across team + index footers.
+COFFEE = (
+    '<a class="coffee" target="_blank" rel="noopener"'
+    ' href="https://qr.mobilepay.fi/box/e0ec31c6-1901-4749-83bf-11db23627dd3/pay-in">'
+    '☕ Like it? Buy me a coffee (MobilePay)</a>'
+)
+
 # chart geometry (extra right margin for the position axis labels)
 _W, _H = 880, 240
 _L, _R, _T, _B = 46, 48, 18, 40
@@ -456,6 +463,7 @@ def render_team_page(t: TeamInsights, event_name: str) -> str:
 <title>{title} — {escape(event_name)}</title>
 <style>{_CSS}</style>{ANALYTICS}</head>
 <body>
+{COFFEE}
 <header class="page-head">
   <div class="crumb"><a href="index.html">← all teams</a> · {escape(event_name)}</div>
   <h1>{title} <span class="bib">#{escape(t.teamid)}</span></h1>
@@ -520,4 +528,8 @@ main { padding: 8px max(16px, 5vw) 40px; }
 .mistakes ul { margin: 4px 0 0; padding-left: 18px; }
 footer { color: var(--muted); font-size: 12px; padding: 0 max(16px,5vw) 40px;
   max-width: 70ch; }
+.coffee { position: fixed; top: 12px; right: 12px; z-index: 10;
+  padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px;
+  background: #fff; color: var(--accent); font-size: 13px; }
+.coffee:hover { background: #f5f7fa; text-decoration: none; }
 """
